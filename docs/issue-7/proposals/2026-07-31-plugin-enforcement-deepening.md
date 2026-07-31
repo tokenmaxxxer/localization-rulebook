@@ -2,161 +2,282 @@
 status: proposed
 issue: issue-7
 files:
-  - localization/hooks/directive.sh
-  - localization/hooks/methodology-gate.sh (new)
-  - localization/hooks/record-fields-localization-gate.sh
-  - localization/hooks/hooks.json
+  - localization/plugins/proposal-gate/.claude-plugin/plugin.json (new)
+  - localization/plugins/proposal-gate/hooks/hooks.json (new)
+  - localization/plugins/proposal-gate/hooks/directive.sh (new)
+  - localization/plugins/proposal-gate/hooks/methodology-gate.sh (new)
+  - localization/plugins/proposal-gate/tests/ (new)
+  - localization/plugins/verdict-axis/.claude-plugin/plugin.json (new)
+  - localization/plugins/verdict-axis/hooks/hooks.json (new)
+  - localization/plugins/verdict-axis/hooks/directive.sh (new)
+  - localization/plugins/verdict-axis/hooks/verdict-axis-gate.sh (new)
+  - localization/plugins/verdict-axis/checklists/locale-fitness-checklist.md (new)
+  - localization/plugins/verdict-axis/tests/ (new)
+  - localization/plugins/mqm-tagging/.claude-plugin/plugin.json (new)
+  - localization/plugins/mqm-tagging/hooks/hooks.json (new)
+  - localization/plugins/mqm-tagging/hooks/directive.sh (new)
+  - localization/plugins/mqm-tagging/hooks/mqm-tagging-gate.sh (new)
+  - localization/plugins/mqm-tagging/tests/ (new)
+  - .claude-plugin/marketplace.json (edit, repo root — 3 new entries)
   - tests/run-gate-tests.sh (new, repo root)
-  - localization/checklists/locale-fitness-checklist.md (new)
 ---
 
-# Plugin 심화: 채택 방법론(issue-1)을 implementation-rulebook 수준 강제 장치로
+# Plugin 심화 (개정): 채택 방법론(issue-1) 3개를 독립 플러그인 세트로
 
 ## 조사 근거
 
-`docs/issue-7/reports/localization/survey.md` (현재 상태 — 스텁 directive
-1줄/facet, phase-2 record 표면만 단어-존재 검사하는 게이트 1개, 게이트
-테스트 0개, 상태추적 0개, 체크리스트 0개) +
-`docs/issue-7/reports/localization/scout-brief.md` (implementation-rulebook
-coding gates + pricing-rulebook methodology-gate.sh 대조, 4앵글
-batched-sequential, 1스테이지 포화 — 근거·출처는 두 파일 참조).
+`docs/issue-7/reports/localization/survey.md` (현재 상태 — 스텁
+directive 1줄/facet, phase-2 record 표면만 단어-존재 검사하는 게이트 1개,
+phase-1 표면 게이트 0개, 게이트 테스트 0개, 상태추적 0개, 체크리스트
+0개; "order-constraint question" 절 — 채택 방법론들은 한 번의 terminal
+record 쓰기 안에 존재하는 독립 필드들이지 tool-call 사이 순서 제약이
+아니라는 결론) + `docs/issue-7/reports/localization/scout-brief.md`
+(implementation-rulebook coding gates + pricing-rulebook
+`methodology-gate.sh` 대조, 4앵글 batched-sequential, 1스테이지 포화) +
+`docs/issue-1/proposals/2026-07-31-localization-rulebook-norms.md`
+((a)/(b) — 이 저장소가 실제로 채택한 세 방법론이 정의된 원본).
 
-## 채택 항목
+**이번 개정의 구속 조건**: 승인자(JiwonJung94)가 issue #7에 남긴 요구
+정정 코멘트가 이 문서의 구조를 강제한다 —
 
-1. **directive 심화**: `core_role_directive`의 4개 인자(구조 불변)는 issue-1
-   그대로 유지하고, 그 호출 뒤에 phase-1/phase-2 각각을 위한 심화 블록을
-   heredoc으로 추가 출력 — `no-footgun/hooks/directive.sh`가 core 호출
-   없이도 자신의 heredoc을 추가로 찍는 것과 같은 자리(SessionStart 훅
-   본문의 core 호출 이후)를 재사용, 새 훅 지점을 만들지 않는다.
-   (scout-brief 근거: "core stub 뒤에 role 고유 블록을 추가하는 자리가
-   이미 이 저장소 계열에 있다" — no-footgun 사례.)
-2. **방법론 게이트 이중화**: 기존 `record-fields-localization-gate.sh`(
-   phase-2 record 표면)는 유지·강화하고, `pricing/hooks/methodology-gate.sh`를
-   참조해 새 `methodology-gate.sh`를 만들어 phase-1 제안서 표면
-   (`docs/issue-<n>/proposals/*localization*.md`)에 issue-1 (a)의 4필수
-   섹션 존재를 검사한다. (scout-brief must-be: "도메인 게이트는 그 도메인
-   norms가 요구사항을 정의한 두 표면을 모두 검사한다".)
-3. **record 게이트 정밀화**: 현재의 "단어 하나라도 있으면 통과" 방식을
-   버리고, terminal record에서 (i) locale별 verdict 목록/표, (ii)
-   verdict-less locale의 사유, (iii) string-external issue 각 항목의 MQM
-   태그, (iv) content-design 핸드오프 트리거 유무를 issue-1 (b)의 4항목
-   그대로 확인하도록 검사 로직을 넓힌다. (survey gap: 현재는 bag-of-words
-   존재 확인일 뿐 항목별 확인이 아님.)
-4. **상태추적: 도입하지 않는다** — 아래 "논리적 근거" 참조. 이건 열린
-   질문이 아니라 이번 제안의 실행 결정이다.
-5. **게이트 테스트**: 레포 루트 `tests/run-gate-tests.sh`를
-   implementation-rulebook의 `tests/run-gate-tests.sh` 패턴(tempdir git
-   init + stdin JSON + subprocess 실행 + exit 0/2 판정)을 **참조**해
-   신규 작성 — 3개 게이트(`record-fields-localization-gate.sh`,
-   신규 `methodology-gate.sh`, core의 `record-fields-gate.sh`는 core canon
-   테스트 영역이므로 이 레포에서 재작성하지 않음) 각각 allow/deny 케이스.
-6. **체크리스트**: `localization/checklists/locale-fitness-checklist.md` —
-   issue-1 (b)-1의 기계적 i18n 축(문자열 외부화/인코딩/plural 규칙/
-   로케일별 키 완전성 + 코드/문자열 리소스가 아닐 때의 N/A 규칙)을 실제
-   체크 가능한 항목 목록으로 문서화. 반복 절차이지만 세션 간 상태를 갖지
-   않고 사람이 읽고 체크하는 정적 목록이면 충분해 agents/는 신설하지
-   않는다 — 아래 근거 참조.
+> 단일 게이트/디렉티브 심화가 아니라 **플러그인 세트**로 체계화한다:
+> 채택 방법론 각각을 독립 플러그인으로(core의 freelunch/scout처럼),
+> 기획서(phase 1) 규범과 산출물(phase 2) 규범도 각각을 플러그인 조합으로
+> 풀어낸다, 각 플러그인 = 자기 완결 + marketplace.json 등록 + 명확한
+> 단일 방법론 담당, proposal에는 플러그인 목록이 필수.
+
+이전 버전(현재 커밋 32efe77, 이 문서가 대체하는 버전)은 단일 심화
+directive + 단일 `methodology-gate.sh` + 단일 강화 record 게이트로
+설계했었다 — 이는 위 정정이 명시적으로 거부한 아키텍처다. 이 문서는
+그 아키텍처를 폐기하고 아래로 다시 설계한다. 이전 버전이 인용한
+survey/scout-brief 근거(특히 fail-closed trap-at-top, 독립 root 해석,
+"additive not replacement" 프레이밍, dual-surface 매칭, subprocess 기반
+게이트 테스트)는 그대로 유효하므로 재인용해 이어간다.
+
+## 플러그인 목록
+
+issue-1 (a)/(b)가 정의한 세 방법론은 정확히 분리 가능한 세 개의
+"YOU DECIDE" 단위다 — 병합하지도, 더 쪼개지도 않는다.
+
+| 이름 | 담당 방법론(단일) | 구성요소 | 조합 관계 |
+|---|---|---|---|
+| `localization-proposal-gate` | issue-1 (a) phase-1 제안서 구조 규범 (4필수 섹션 + per-claim 인용 요구) | directive(SessionStart heredoc), 게이트(PreToolUse `methodology-gate.sh`), 테스트 | **phase-1 규범 = 이 플러그인 단독** |
+| `localization-verdict-axis` | issue-1 (b)-1 두 축 판정 방법론(ISO 17100/LSO 축소 채용: 체크리스트 축 + 스타일가이드 축, 유창성 재작성 제외, N/A 규칙) | directive(SessionStart heredoc), 게이트(PreToolUse `verdict-axis-gate.sh`), `locale-fitness-checklist.md`, 테스트 | **phase-2 규범의 절반** — mqm-tagging과 병렬 조합 |
+| `localization-mqm-tagging` | issue-1 (b)-2 MQM 8-dimension 축소 채용 분류 방법론 | directive(SessionStart heredoc), 게이트(PreToolUse `mqm-tagging-gate.sh`), 테스트 | **phase-2 규범의 절반** — verdict-axis와 병렬 조합 |
+
+기존 base `localization` 플러그인(루트 `.claude-plugin/plugin.json` +
+`localization/hooks/directive.sh`의 `core_role_directive` 4-인자 호출,
+issue-2에서 구조 동결 — `docs/issue-2/proposals/
+2026-07-31-core-canon-reference-switch.md` §3)은 그대로 둔다. 위 3개는
+그 옆에 **추가**되는 신규 플러그인이지, base를 대체하거나 그 호출부를
+다시 여는 게 아니다.
+
+## 채택 항목 (이번엔 "어떤 플러그인이 담당하는가"로)
+
+1. **phase-1 제안서 구조 규범** → `localization-proposal-gate`가 전담.
+   directive 블록: 4필수 섹션 이름(조사근거/채택항목/논리적근거/반영계획)
+   + "근거 없는 채택 주장은 가정으로 격하 표기" 금지 + "조사 생략 시
+   생략 근거를 survey에 기록" 판단 기준. 게이트: `docs/issue-<n>/
+   proposals/*localization*.md` 쓰기에서 4섹션 존재 확인(pricing의
+   `methodology-gate.sh` 패턴 참조, scout-brief must-be).
+2. **두 축 판정 방법론(ISO 17100/LSO 축소 채용)** →
+   `localization-verdict-axis`가 전담. directive 블록: (i) 체크리스트
+   축(문자열 외부화/인코딩/plural/키 완전성, 코드·문자열 리소스가 아니면
+   N/A) (ii) 스타일가이드·로케일 관례 축, "유창성 재작성은
+   content-design 핸드오프 영역" 금지. 게이트: `docs/issue-<n>/
+   reports/localization.md` terminal 쓰기에서 locale별 두 축 verdict
+   존재 확인(단순 "locale" 토큰 존재가 아니라 verdict-less locale의
+   사유까지).
+3. **MQM 8-dimension 축소 채용 분류** → `localization-mqm-tagging`이
+   전담. directive 블록: 8대 카테고리 나열(Accuracy/Fluency/
+   Terminology/Locale convention/Style/Verity/Design/
+   Internationalization) + "100+ 세부 issue type은 채택하지 않음" 범위
+   한정. 게이트: 같은 record 표면에서 각 string-external issue 항목
+   **근처**에 8종 중 하나의 태그가 붙어 있는지(문서 전체 아무 곳 아님).
 
 ## 각 채택의 논리적 근거
 
-- **directive 심화를 core 호출 뒤 추가 블록으로**: issue-2에서 이미
-  "core stub은 4개 인자 + 고정 RECORD: 줄만 출력한다"를 구조 불변으로
-  확정했다(`docs/issue-2/proposals/2026-07-31-core-canon-reference-switch.md`
-  §3). 이 구조를 다시 여는 건 캐논 참조 원칙 위반 방향이므로, 심화
-  내용은 같은 `directive.sh` 파일 안에서 core 호출 **뒤에** heredoc으로
-  추가한다 — `no-footgun/hooks/directive.sh`가 이미 이 레포 계열
-  (implementation-rulebook)에서 "core/스텁 호출 없이도 자기 heredoc을
-  더 찍는다"는 패턴을 보여준다(scout Sources). 캐논 스크립트 자체는 한
-  글자도 복사하지 않는다 — `role-directive.sh` 소스 라인은 그대로,
-  추가 텍스트는 이 저장소 파일에만 존재.
-- **phase-1 게이트를 pricing 패턴으로**: 이슈 본문이 명시적으로
-  "produces 규범의 필수 구성요소를 기계 검증"을 요구했고, 그 규범은
-  이미 phase-1 제안서에 4필수 섹션((a) 조사근거/채택항목/논리적근거/
-  반영계획)을 정의해뒀다(issue-1 norms) — pricing의 게이트가 정확히
-  이 형태(자기 role의 이미 채택된 norms 문서를 인용해 그 항목만
-  검사)를 이미 구현해 보였으므로 새 설계를 발명하지 않고 그 형태를
-  따른다.
-- **record 게이트를 항목별로 정밀화**: 현재 게이트가 "locale"이라는
-  단어 하나, MQM 8개 중 아무 단어 하나만 있어도 통과시킨다 — 이는
-  "verdict 없는 locale의 사유 명시" 같은 issue-1 (b)의 나머지 요구를
-  전혀 검증하지 못한다. 게이트가 존재한다는 사실과 게이트가 규범을
-  실제로 강제한다는 사실은 다르다 — 이 간극이 이슈 #7이 지적하는
-  "directive 한 줄 + 문서로만 남았다"는 문제의 정확한 사례.
-- **상태추적을 도입하지 않는 이유**: implementation-rulebook의 hunt-guard/
-  hunt-state가 존재하는 이유는 "단일 세션 내 여러 Agent/Task/Workflow
-  dispatch가 서로 순서를 어길 수 있는 프로세스 사실"(동시 실행되는
-  hunter 수)을 카운트하는 것이지, 문서 안의 필드 순서를 강제하는 게
-  아니다. localization의 방법론(체크리스트 축 → 스타일가이드 축 →
-  MQM 태깅)은 전부 **한 번의 terminal record 쓰기 안에 존재하는 필드들**
-  이고, 그 쓰기 자체가 이미 게이트로 걸려 있다(채택 항목 3) — 필드가
-  다 채워졌는지 확인하는 것과, 채워진 순서를 프로세스 수준에서 강제하는
-  것은 다른 문제이고 전자만 이 역할에 실제로 필요하다. 스텁 lock/count
-  파일을 도입하면 강제할 대상이 없는 상태 기계를 하나 더 유지 부담으로
-  얹는 것 — survey의 "Order-constraint question" 절 결론 재확인.
-- **agents/ 대신 정적 체크리스트**: 반복 절차(기계적 i18n 4항목 확인)가
-  존재하긴 하지만, hunt-guard가 다루는 "여러 세션에 걸쳐 실행 횟수를
-  세야 하는 에이전트 dispatch"류의 문제가 아니라 "매번 같은 4개 항목을
-  사람이 훑는" 정적 절차다. 정적 절차에 agent 프레임을 씌우면 실행
-  오버헤드(별도 dispatch)만 추가되고 강제력은 늘지 않는다 — 체크리스트
-  파일 하나로 같은 목적(항목 누락 방지)을 달성.
+- **왜 3개로 쪼갰나(병합이 아니라)**: 위 승인자 정정이 구조 요구이기도
+  하지만, 근거도 있다 — 세 방법론은 서로 다른 write 표면(phase-1
+  proposal vs phase-2 record)과 서로 다른 검증 축(제안서 구조 vs 판정
+  두 축 vs 분류)을 갖는다. 하나의 파일/게이트에 셋을 다 넣으면
+  "이 게이트가 지금 무슨 규범을 검사 중인가"를 코드를 읽어야만 알 수
+  있게 된다 — 반대로 플러그인 하나 = 방법론 하나면 `plugin.json`의
+  description 한 줄이 곧 그 답이다(core `freelunch`/`scout`이 이미
+  이 패턴 — 룰북당 여러 개의 자기완결 플러그인).
+- **조합(composition)이 실제로 어떻게 동작하는가 — 이게 이 설계의
+  핵심**: phase-2 규범("두 축 판정 AND MQM 태깅 모두 만족해야 terminal
+  record 통과")은 `localization-verdict-axis`와
+  `localization-mqm-tagging`이 **각자 독립적으로** 같은 write 표면
+  (`docs/issue-<n>/reports/localization.md` at terminal state)에
+  PreToolUse 훅을 등록하는 것만으로 자동 성립한다. Claude Code는 한
+  이벤트에 매칭되는 모든 훅을 실행하고, 그중 하나라도 deny(exit 2)하면
+  그 write 자체가 막힌다 — 따라서 "verdict-axis 통과 AND mqm-tagging
+  통과"라는 AND 합성은 두 스크립트 중 어느 쪽도 상대방의 존재를 몰라도
+  된다. 이는 단일 병합 게이트 스크립트 안에 `if axis_ok && mqm_ok`를
+  손으로 쓰는 것보다 오히려 **더 기계적으로 견고**하다 — 병합 게이트는
+  한쪽 로직을 고치다 다른 쪽 조건을 실수로 깨뜨릴 수 있지만, 분리된
+  두 훅은 서로의 실패 모드에 영향을 주지 않는다(한쪽이 버그로 항상
+  allow해도 다른 쪽이 여전히 독립적으로 deny할 수 있음). 방법론별
+  플러그인 분리가 "조직 취향"이 아니라 이 조합 방식의 전제 조건이라는
+  뜻이다.
+- **phase-1은 왜 단독 플러그인 하나인가(조합이 아니라)**: issue-1의
+  (a)/(b) 분리 자체가 이미 "제안서 규범은 하나, 산출물 규범은 두
+  방법론의 결합"이라는 비대칭 구조를 갖고 있다 — phase-1엔 애초에 결합할
+  두 번째 방법론이 없다(제안서 구조 규범 하나뿐). 그러므로
+  `localization-proposal-gate`는 조합 없이 `docs/issue-<n>/
+  proposals/*localization*.md` 표면 하나에 단독으로 건다.
+- **상태추적은 여전히 도입하지 않는다** — survey의 "Order-constraint
+  question" 결론 재확인: 세 방법론(제안서 구조, 두 축 판정, MQM 태깅)은
+  모두 각자의 표면에 대한 **단일 terminal 쓰기 안의 필드 완전성**
+  문제이지, tool-call 사이의 순서/카운트를 프로세스 수준에서 강제해야
+  하는 문제(hunt-guard/hunt-state류)가 아니다. 플러그인을 셋으로
+  쪼갰다고 해서 이 결론이 바뀌지 않는다 — 오히려 "각 플러그인이 자기
+  표면에 자기 완결 게이트 하나만 갖는다"는 구조가 순서 제약이 없다는
+  사실과 정합적이다. lock/count 파일은 세 플러그인 어디에도 없다.
+- **`locale-fitness-checklist.md`가 왜 `agents/`가 아니라 static
+  파일이고, 왜 `verdict-axis` 플러그인 소유인가**: 체크리스트가 다루는
+  4항목(외부화/인코딩/plural/키 완전성)은 매번 같은 항목을 사람이
+  훑는 정적 절차이지, 세션 간 dispatch 횟수를 세야 하는 문제가 아니다
+  (agent 프레임을 씌우면 실행 오버헤드만 늘고 강제력은 늘지 않음 —
+  이전 버전과 동일 근거, 유지). 소유권은 verdict-axis에 두는데, 이
+  체크리스트가 검증하는 게 정확히 그 플러그인이 전담하는 두 축 중
+  체크리스트 축이기 때문이다 — mqm-tagging이나 proposal-gate가 이
+  파일을 참조할 이유가 없다(자기 완결 원칙).
+- **base `localization` 플러그인을 안 건드리는 이유**: issue-2 §3이
+  이미 `core_role_directive` 4-인자 호출을 구조 동결했다. 이 구조를
+  다시 여는 건 canon 참조 원칙 위반 방향이다. 3개의 신규 플러그인은
+  각자 별도 SessionStart 훅으로 자기 heredoc 블록을 출력하고, base의
+  호출부는 한 글자도 안 건드린다.
 
 ## 플러그인 반영 계획 (phase 2에서 실행 — 이번 PR은 계획만)
 
-1. `localization/hooks/directive.sh`: 기존 `core_role_directive` 호출은
-   1글자도 안 건드리고, 그 아래 새 heredoc 블록 추가:
-   - PHASE 1 심화: 4필수 섹션 이름 나열 + "근거 없는 채택 주장은 가정으로
-     격하 표기" 금지사항 + "조사 생략 시 생략 근거를 survey에 기록"
-     판단 기준.
-   - PHASE 2 심화: 두 축(체크리스트/스타일가이드) 판단 기준 + "언어
-     자체의 유창성 재작성은 하지 않는다(content-design 핸드오프)" 금지
-     + "코드/문자열 리소스가 아니면 체크리스트 축은 N/A" 판단 기준 +
-     MQM 8종 태깅 의무.
-   - 두 블록 모두 `<localization-methodology-directive>` 같은 태그로
-     감싸 세션 컨텍스트에서 core 블록과 구분 가능하게.
-2. 신규 `localization/hooks/methodology-gate.sh`: `pricing/hooks/
-   methodology-gate.sh`의 구조(트랩-앳-탑, 루트 해석, Write/Edit/
-   MultiEdit 콘텐츠 재구성, 실패-닫힘)를 참조해 작성. 대상 정규식
-   `^docs/issue-[0-9]+/proposals/.*localization.*\.md$`. 검사 4항목:
-   조사근거 절 존재(파일명 또는 "survey"/"scout-brief" 인용), 채택항목
-   절 존재, 논리적근거 절 존재, 반영계획 절 존재 — 4개 중 하나라도
-   없으면 거부, 메시지에 issue-1 norms (a) 인용.
-3. `record-fields-localization-gate.sh` 수정: 기존 두 개(locale
-   presence, MQM presence) 검사를 유지하되 강화 — locale 목록을
-   불릿/표 패턴으로 파싱해 각 locale에 verdict 토큰(pass/fail/n/a)이
-   붙어있는지, verdict-less locale에 사유 문구가 있는지, 최소 1개의
-   MQM 태그가 "이슈 항목 근처"에 있는지(현재는 문서 전체 아무 곳)로
-   범위를 좁힌다. 세부 정규식은 phase 2에서 확정.
-4. `localization/hooks/hooks.json`: `PreToolUse`에 신규
-   `methodology-gate.sh` 항목 1개 추가(matcher `.*`, 기존 항목 옆).
-5. `tests/run-gate-tests.sh` (레포 루트, 신규): implementation-rulebook의
-   `run()` 헬퍼(tempdir git init + stdin JSON + subprocess + exit 코드
-   판정)를 참조해 재작성 — 복사 아님, 이 레포의 두 게이트 대상 fixture로
-   새로 만든다. 최소 케이스: methodology-gate 4섹션-완전 allow / 1섹션
-   누락 deny / 무관 경로 no-op(allow); record-fields-localization-gate
-   기존 2케이스 유지 + 신규 verdict-사유-누락 deny 케이스 추가.
-6. `localization/checklists/locale-fitness-checklist.md` (신규): 4개
-   기계적 i18n 항목(문자열 외부화, 인코딩, plural 규칙, 로케일별 키
-   완전성) + 코드/문자열 리소스가 아닐 때의 N/A 처리 규칙을 체크박스
-   형태로. directive.sh의 PHASE 2 심화 블록에서 이 파일 경로를 인용.
-7. **검증 방법 (phase 2 완료 후)**: (i) `tests/run-gate-tests.sh` 실행
-   결과 all-pass를 기록; (ii) `directive.sh`를
-   `CLAUDE_ROLE=localization`로 수동 실행해 심화 블록 노출 확인; (iii)
-   결과를 `docs/issue-7/reports/localization.md`에 기록.
+각 플러그인은 core `localization`과 같은 골격
+(`.claude-plugin/plugin.json` + `hooks/hooks.json` + `hooks/*.sh`)을
+따르되 서로 다른 디렉토리에 완전히 독립적으로 놓인다.
+
+1. **`localization/plugins/proposal-gate/`**
+   - `.claude-plugin/plugin.json`: name `localization-proposal-gate`,
+     description에 "phase-1 제안서 구조 규범 전담" 명시.
+   - `hooks/hooks.json`: SessionStart → `hooks/directive.sh`; PreToolUse
+     (matcher `.*`) → `hooks/methodology-gate.sh`.
+   - `hooks/directive.sh`: core 호출 없이(이 플러그인은 base 옆의 추가
+     플러그인이므로 자체 heredoc만 출력 — no-footgun 계열 패턴 참조) 4
+     필수 섹션 + 인용 요구 + 생략-근거 판단 기준 출력.
+   - `hooks/methodology-gate.sh`: pricing `methodology-gate.sh` 구조를
+     **참조**(트랩-앳-탑, 독립 root 해석, Write/Edit/MultiEdit 콘텐츠
+     재구성, fail-closed) 해 새로 작성. 대상 정규식
+     `^docs/issue-[0-9]+/proposals/.*localization.*\.md$`. 4섹션(조사
+     근거/채택 항목/논리적 근거/반영 계획) 중 하나라도 없으면 거부,
+     메시지에 issue-1 (a) 인용.
+   - `tests/`: allow(4섹션 완전) / deny(1섹션 누락) / no-op(무관 경로)
+     케이스.
+
+2. **`localization/plugins/verdict-axis/`**
+   - `.claude-plugin/plugin.json`: name `localization-verdict-axis`,
+     description에 "phase-2 두 축 판정 방법론 전담" 명시.
+   - `hooks/hooks.json`: SessionStart → `hooks/directive.sh`; PreToolUse
+     (matcher `.*`) → `hooks/verdict-axis-gate.sh`.
+   - `hooks/directive.sh`: 두 축 판단 기준 + 유창성 재작성 금지(
+     content-design 핸드오프) + N/A 규칙 + `checklists/
+     locale-fitness-checklist.md` 경로 인용 출력.
+   - `hooks/verdict-axis-gate.sh`: 대상 `docs/issue-<n>/
+     reports/localization.md`, terminal `loop_state`(core 기본값
+     `landed` 사용, role-specific terminal state 불필요 — survey 결론
+     유지)일 때만 검사 — locale별 두 축 verdict 존재 + verdict-less
+     locale의 사유 존재. 기존 `record-fields-localization-gate.sh`의
+     locale-관련 절반을 이 플러그인으로 이관하고 세부 정규식을 정밀화
+     (기존: 단어 존재 → 신규: locale별 verdict 파싱).
+   - `checklists/locale-fitness-checklist.md`: 4개 기계적 i18n 항목 +
+     N/A 처리 규칙, 체크박스 형태.
+   - `tests/`: allow(두 축 verdict 완전) / deny(verdict-less locale
+     사유 누락) / N/A 케이스 / no-op.
+
+3. **`localization/plugins/mqm-tagging/`**
+   - `.claude-plugin/plugin.json`: name `localization-mqm-tagging`,
+     description에 "phase-2 MQM 8-dim 분류 방법론 전담" 명시.
+   - `hooks/hooks.json`: SessionStart → `hooks/directive.sh`; PreToolUse
+     (matcher `.*`) → `hooks/mqm-tagging-gate.sh`.
+   - `hooks/directive.sh`: MQM 8대 카테고리 나열 + "100+ 세부 미채택"
+     범위 한정 출력.
+   - `hooks/mqm-tagging-gate.sh`: 같은 record 표면·terminal 조건에서
+     각 string-external issue 항목 **근처**(같은 불릿/줄 또는 바로
+     다음 줄)에 8종 중 하나의 태그 문자열이 있는지 검사 — 기존
+     `record-fields-localization-gate.sh`의 MQM-관련 절반을 이관하고
+     "문서 전체 아무 곳" 검사를 "항목별 인접" 검사로 정밀화.
+   - `tests/`: allow(모든 issue 태깅) / deny(태그 없는 issue 존재) /
+     no-op.
+
+4. **기존 `localization/hooks/record-fields-localization-gate.sh` 및
+   `localization/hooks/directive.sh`**: base 플러그인 소유로 그대로
+   유지 — issue-1 최초 채택분의 최소 게이트 자리이며, 위 3개 신규
+   플러그인이 각자의 표면에서 더 정밀한 검사를 추가로 건다. 중복
+   deny는 문제가 아니다(fail-closed 원칙상 여러 게이트가 같은 결함을
+   각자 잡아도 안전 쪽으로만 작동).
+
+5. **루트 `.claude-plugin/marketplace.json`**: 기존 `"localization"`
+   항목 옆에 3개 신규 항목 추가 —
+   ```json
+   { "name": "localization-proposal-gate", "source": "./localization/plugins/proposal-gate", "description": "..." },
+   { "name": "localization-verdict-axis", "source": "./localization/plugins/verdict-axis", "description": "..." },
+   { "name": "localization-mqm-tagging", "source": "./localization/plugins/mqm-tagging", "description": "..." }
+   ```
+   각 description은 "담당 방법론 1개"만 진술(위 플러그인 목록 표의
+   문구 재사용).
+
+6. **루트 `tests/run-gate-tests.sh`** (신규, 레포 최초): implementation-
+   rulebook의 `run()` 헬퍼(tempdir git init + stdin JSON + subprocess +
+   exit 코드 판정, scout-brief must-be)를 **참조**해 새로 작성 — 3개
+   신규 게이트(`methodology-gate.sh`, `verdict-axis-gate.sh`,
+   `mqm-tagging-gate.sh`) 각각의 allow/deny/no-op 케이스를 하나의
+   러너에서 순차 실행. 기존 `record-fields-localization-gate.sh`는
+   base 플러그인 소관이므로 이 러너에 포함하되 케이스는 이관 후 축소된
+   범위(단순 존재 확인만, verdict/MQM 세부는 신규 게이트가 담당)로
+   유지.
+
+7. **검증 방법 (phase 2 완료 후)**: (i) `tests/run-gate-tests.sh`
+   실행 결과 all-pass 기록; (ii) 3개 신규 `directive.sh`를 각각
+   `CLAUDE_ROLE=localization`로 수동 실행해 heredoc 블록 노출 확인
+   (base 블록과 함께 3개 블록이 모두 세션에 나타나는지는 phase 2
+   실측 — 아래 검증 미해결 항목 참조); (iii) marketplace.json에 4개
+   localization 계열 항목(base 1 + 신규 3)이 모두 유효 JSON으로
+   파싱되는지 확인; (iv) 결과를 `docs/issue-7/reports/localization.md`
+   에 기록.
+
+**phase-2 검증 미해결 항목(사실로 단정하지 않음)**: Claude Code가 같은
+role 세션에서 여러 플러그인의 SessionStart 훅을 **모두 병합 실행**
+하는지, 아니면 마지막에 등록된 것만 실행하는지는 이번 조사에서
+확인하지 못했다 — phase 2에서 반드시 실측 확인해야 하는 open
+verification point로 남긴다. PreToolUse 훅의 "매칭되는 모든 훅 실행,
+하나라도 deny하면 차단" 동작은 core `localization` 플러그인과 기존
+`record-fields-localization-gate.sh`가 같은 `matcher: ".*"` 아래 이미
+동작 중인 사실로 뒷받침되지만(현재도 PreToolUse에 훅 1개가 정상
+동작), 여러 **플러그인**에 걸쳐서도 동일하게 병합되는지는 3개 신규
+플러그인을 실제로 설치·실행해봐야 확정된다.
 
 ## 명시적 범위 밖
 
-- 실제 파일 변경(directive.sh 심화, 신규 게이트/테스트/체크리스트 작성,
-  hooks.json 등록) — phase 2, Approve 이후.
-- 상태추적 기계(lock/count 파일) 신설 — 위 근거대로 이번 방법론에는
-  강제할 순서 사실이 없어 도입하지 않음. 향후 norms 개정으로 진짜 순서
-  제약이 생기면 그때 hunt-guard/hunt-state 패턴을 참조.
-- `localization/agents/` 신설 — 정적 체크리스트로 충분, 위 근거 참조.
-- core canon 게이트(`record-fields-gate.sh` 등) 자체 수정/재작성 — 참조만.
+- 실제 파일 생성(3개 플러그인 디렉토리, marketplace.json 편집,
+  hooks/게이트/체크리스트/테스트 작성) — phase 2, Approve 이후. 이번
+  PR은 설계 문서만 바꾼다.
+- core canon 스크립트(`role-directive.sh`, `record-fields-gate.sh` 등)
+  자체 수정/복사 — 참조만, 한 글자도 vendoring하지 않는다(core
+  canon-scripts.md 원칙).
+- base `localization` 플러그인의 `core_role_directive` 4-인자 호출부
+  재구조화 — issue-2 §3 동결 유지, 재론하지 않음.
+- 상태추적 기계(lock/count 파일) 신설 — 위 근거대로 이번 방법론
+  어디에도 강제할 순서 사실이 없어 3개 플러그인 어디에도 도입하지
+  않음.
+- ISO 17100 전체 인증 체계·번역가 자격·클라이언트 계약 — issue-1이
+  이미 skip한 범위, 재론하지 않음.
 
-## 어떻게 검증할 것인가 (phase 1 자체에 대해)
+## 어떻게 검증할 것인가
 
-이 문서가 조사 근거/채택 항목/논리적 근거/반영 계획 4절을 모두 포함하고
-(자기 자신도 issue-1이 정의한 phase-1 규범 대상이므로 self-conformant),
-각 채택 주장이 survey.md/scout-brief.md의 관찰 또는 이 레포/
-implementation-rulebook/pricing-rulebook의 실제 경로를 인용하는지로
-self-check 가능 — 위 각 절이 그 인용을 담고 있음.
+이 문서 자신이 `localization-proposal-gate`가 앞으로 강제할 4필수
+섹션(조사 근거/채택 항목/논리적 근거/반영 계획 — 여기서는 "플러그인
+반영 계획"으로 명명하되 동일 절)을 포함하는지로 self-check 가능하고,
+추가로 승인자 정정이 요구한 "플러그인 목록" 절을 포함하는지로도
+self-conformant해야 한다(위 표 절 존재). 각 채택 주장이
+survey.md/scout-brief.md/issue-1 proposal의 구체 관찰 또는
+implementation-rulebook/pricing-rulebook의 실제 경로를 인용하는지로도
+확인 가능 — 위 각 절이 그 인용을 담고 있음.
