@@ -1,0 +1,7 @@
+{
+  "name": "localization-proposal-gate",
+  "description": "issue-1 (a) phase-1 제안서 구조 규범 전담: docs/issue-<n>/proposals/*localization*.md 는 4필수 섹션(조사 근거/채택 항목/논리적 근거/반영 계획) + per-claim 인용을 갖춰야 한다. base localization 플러그인 옆의 추가 플러그인 — core_role_directive 호출부를 대체하지 않는다.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}

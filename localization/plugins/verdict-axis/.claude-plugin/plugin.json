@@ -1,0 +1,7 @@
+{
+  "name": "localization-verdict-axis",
+  "description": "issue-1 (b)-1 phase-2 두 축 판정 방법론 전담(ISO 17100/LSO 축소 채용): 체크리스트 축 + 스타일가이드 축, 유창성 재작성 제외, N/A 규칙. mqm-tagging과 같은 표면(docs/issue-<n>/reports/localization.md terminal write)에 독립적으로 걸려 AND 합성을 이룬다.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}
