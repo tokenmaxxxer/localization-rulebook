@@ -8,6 +8,21 @@
       "name": "localization",
       "source": "./localization",
       "description": "The localization role on contract v3 (issue-160 round-3 promotion). Decides: 다른 로케일에서도 산출물이 성립하는가."
+    },
+    {
+      "name": "localization-proposal-gate",
+      "source": "./localization/plugins/proposal-gate",
+      "description": "issue-1 (a) phase-1 제안서 구조 규범 전담: 4필수 섹션(조사 근거/채택 항목/논리적 근거/반영 계획) + per-claim 인용 요구."
+    },
+    {
+      "name": "localization-verdict-axis",
+      "source": "./localization/plugins/verdict-axis",
+      "description": "issue-1 (b)-1 두 축 판정 방법론 전담(ISO 17100/LSO 축소 채용): 체크리스트 축 + 스타일가이드 축, 유창성 재작성 제외, N/A 규칙."
+    },
+    {
+      "name": "localization-mqm-tagging",
+      "source": "./localization/plugins/mqm-tagging",
+      "description": "issue-1 (b)-2 MQM 8-dimension 축소 채용 분류 방법론 전담: string-external issue 항목마다 8종 중 하나의 인접 태그 요구."
     }
   ]
 }
