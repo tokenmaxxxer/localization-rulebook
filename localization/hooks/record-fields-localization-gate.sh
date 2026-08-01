@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# PreToolUse gate (Write|Edit|MultiEdit) — role-specific extension on top of
-# core's record-fields-gate.sh (§20 minimums). Applies only when the write
-# targets this role's own record (docs/issue-<n>/reports/localization.md)
+# PreToolUse gate (Write|Edit|MultiEdit|Bash) — role-specific extension on
+# top of core's record-fields-gate.sh (§20 minimums). Applies only when the
+# write targets this role's own record (docs/issue-<n>/reports/localization.md)
 # AND the resulting loop_state is terminal (default: core's "landed", via
 # RECORD_FIELDS_TERMINAL_STATES — unset here, no role-specific terminal
 # state was found in phase 1 survey/scout).
@@ -13,80 +13,105 @@
 #       top-level dimensions (Accuracy, Fluency, Terminology, Locale
 #       convention, Style, Verity, Design, Internationalization).
 # This does not replace core's §20 check — it runs alongside it, checking
-# fields §20 does not know about. Not a copy of core/hooks/record-fields-gate.sh
-# (core canon is referenced via role-directive.sh, never vendored here).
+# fields §20 does not know about.
+#
+# Migrated to the gate-house standard (core issue #72):
+# core/hooks/lib/gate-lib.sh / gate-lib.py are sourced/loaded for the
+# fail-closed trap, kill-switch convention, JSON parse, path normalize and
+# Write/Edit/MultiEdit reconstruction primitives, replacing the 4 hand-rolled
+# copies this gate used to carry. Referenced only, never vendored
+# (docs/handbooks/canon-scripts.md at core).
+#
+# Semantic upgrade (issue-10): section-anchored checks instead of bare
+# substring matches — requires a `target locale` markdown heading with at
+# least one list item before the next heading, and either an MQM-tagging
+# heading marker (`## MQM tags`) or at least one adjacently-tagged
+# `- issue:` bullet, instead of the word "locale"/a dimension name occurring
+# anywhere in the document. (Full per-issue tag coverage is still owned by
+# localization-mqm-tagging's own gate — this check only requires the field
+# to be present at all.)
 #
 # Kill switch: export RECORD_FIELDS_LOCALIZATION_GATE_OFF=1
+CORE_HOOKS_ROOT="${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks"
+. "$CORE_HOOKS_ROOT/lib/gate-lib.sh"
+gate_trap_fail_closed
 set -uo pipefail
 
-role="${CLAUDE_ROLE:-}"
-deny() { echo "${role:-record-fields-localization-gate}: refused — $1" >&2; exit 2; }
+GATE_NAME="record-fields-localization-gate"
 
-case "${RECORD_FIELDS_LOCALIZATION_GATE_OFF:-}" in
-  ""|0|false|no|off) ;;
-  *) exit 0 ;;
-esac
+gate_kill_switch_active "${RECORD_FIELDS_LOCALIZATION_GATE_OFF:-}" || exit 0
+[ "${CLAUDE_ROLE:-}" = "localization" ] || exit 0
 
-[ "$role" = "localization" ] || exit 0
-
-command -v python3 >/dev/null 2>&1 || deny "record-fields-localization-gate.sh requires python3, which is not on PATH; denying rather than guessing."
+command -v python3 >/dev/null 2>&1 || gate_deny "$GATE_NAME" "requires python3, which is not on PATH; denying rather than guessing."
 
 payload="$(cat 2>/dev/null || true)"
-[ -n "$payload" ] || deny "record-fields-localization-gate: empty tool-use payload on stdin; cannot evaluate."
-
-_target="$(printf '%s' "$payload" | python3 -c '
-import json,sys
-try: e=json.loads(sys.stdin.read())
-except Exception: sys.exit(0)
-ti=e.get("tool_input") if isinstance(e,dict) else None
-if isinstance(ti,dict):
-    for k in ("file_path","notebook_path"):
-        v=ti.get(k)
-        if isinstance(v,str) and v: print(v); break
-' 2>/dev/null || true)"
+[ -n "$payload" ] || gate_deny "$GATE_NAME" "empty tool-use payload on stdin; cannot evaluate."
 
 _plausible() { [ -n "$1" ] && [ -d "$1" ] && { [ -e "$1/.git" ] || [ -f "$1/docs/specs/role-handoff-contract.md" ]; }; }
-_under() {
-  [ -z "$2" ] && return 0
-  python3 -c '
-import os,posixpath,sys
-r,t=sys.argv[1],sys.argv[2]
-try: rr=posixpath.normpath(os.path.realpath(r).replace("\\","/"))
-except Exception: sys.exit(1)
-n=t.replace("\\","/"); a=n if posixpath.isabs(n) else posixpath.join(rr,n)
-a=posixpath.normpath(a); real=posixpath.normpath(os.path.realpath(a).replace("\\","/"))
-sys.exit(0 if (real==rr or real.startswith(rr+"/")) else 1)
-' "$1" "$2"
-}
 
 root=""
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR" && _under "$CLAUDE_PROJECT_DIR" "$_target"; then
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR"; then
   root="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)"
 fi
-if [ -z "$root" ]; then
-  d="$_target"; [ -n "$d" ] || d="$(pwd -P)"; [ -d "$d" ] || d="$(dirname "$d")"
-  root="$(git -C "$d" rev-parse --show-toplevel 2>/dev/null || true)"
-fi
 [ -z "$root" ] && root="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
-[ -z "$root" ] && deny "no project root could be determined; failing closed."
+[ -z "$root" ] && gate_deny "$GATE_NAME" "no project root could be determined; failing closed."
+
+# Bash-tool coverage: a shell command writing the target record directly
+# (redirection, sed -i, etc.) has no reconstructable content, so it is
+# fail-closed denied rather than silently allowed through a gate that only
+# ever looked at Write/Edit/MultiEdit tool_input.
+tool_name="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    e = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+print(e.get("tool_name", "") if isinstance(e, dict) else "")
+' 2>/dev/null || true)"
+
+if [ "$tool_name" = "Bash" ]; then
+  cmd="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    e = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+ti = e.get("tool_input") if isinstance(e, dict) else None
+if isinstance(ti, dict):
+    v = ti.get("command")
+    if isinstance(v, str):
+        print(v)
+' 2>/dev/null || true)"
+  hit=0
+  while IFS= read -r tok; do
+    case "$tok" in
+      *docs/issue-*/reports/localization.md) hit=1 ;;
+    esac
+  done < <(gate_bash_write_targets "$cmd")
+  if [ "$hit" -eq 1 ]; then
+    gate_deny "$GATE_NAME" "a Bash command appears to write docs/issue-<n>/reports/localization.md but its resulting content cannot be reconstructed from a shell command; use Write/Edit/MultiEdit so locale/MQM fields can be checked."
+  fi
+  exit 0
+fi
 
 RF_PAYLOAD="$payload" RF_ROOT="$root" \
 RF_TERMINAL="${RECORD_FIELDS_TERMINAL_STATES:-landed}" \
+GATE_LIB_PY="$GATE_LIB_PY" \
 python3 <<'PY'
 import sys as _fc_sys
 try:
-    import json, os, posixpath, re, sys
+    import importlib.util, json, os, posixpath, re, sys
 
     def deny(m):
-        sys.stderr.write("record-fields-localization-gate: refused — %s\n" % m); sys.exit(2)
+        sys.stderr.write("record-fields-localization-gate: refused — %s\n" % m)
+        sys.exit(2)
+
+    _spec = importlib.util.spec_from_file_location("gate_lib", os.environ["GATE_LIB_PY"])
+    gate_lib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(gate_lib)
 
     raw = os.environ.get("RF_PAYLOAD", "")
-    try:
-        ev = json.loads(raw) if raw else {}
-    except ValueError:
-        deny("the tool-call payload is not valid JSON; cannot judge localization record fields on an unparseable write.")
-    if not isinstance(ev, dict):
-        deny("the tool-call payload is not a JSON object; failing closed.")
+    ev = gate_lib.gate_parse_json_or_deny(raw, deny)
 
     tool = ev.get("tool_name")
     ti = ev.get("tool_input")
@@ -97,15 +122,6 @@ try:
     RECORD_RE = re.compile(r'^docs/issue-[0-9]+/reports/localization\.md$')
     TERMINAL = set(os.environ["RF_TERMINAL"].split())
 
-    def resolve(p):
-        n = p.replace("\\", "/")
-        a = n if posixpath.isabs(n) else posixpath.join(root, n)
-        a = posixpath.normpath(a)
-        try:
-            return posixpath.normpath(os.path.realpath(a).replace("\\", "/"))
-        except OSError:
-            return a
-
     path = None
     if tool in ("Write", "Edit", "MultiEdit"):
         p = ti.get("file_path")
@@ -114,46 +130,21 @@ try:
     if path is None:
         sys.exit(0)
 
-    r = resolve(path)
-    if not r.startswith(root + "/"):
-        sys.exit(0)
-    rel = r[len(root):].lstrip("/")
-    if not RECORD_RE.match(rel):
+    rel = gate_lib.gate_normalize_path(root, path)
+    if rel is None or not RECORD_RE.match(rel):
         sys.exit(0)
 
+    fs_path = os.path.join(root, rel)
     current = None
-    if os.path.isfile(r):
+    if os.path.isfile(fs_path):
         try:
-            with open(r, encoding="utf-8-sig") as fh:
+            with open(fs_path, encoding="utf-8-sig") as fh:
                 current = fh.read(1 << 20)
         except OSError:
             deny("%s exists but cannot be read; failing closed." % rel)
 
-    new_text = None
-    if tool == "Write":
-        c = ti.get("content")
-        if isinstance(c, str):
-            new_text = c
-    elif tool == "Edit":
-        o, n = ti.get("old_string"), ti.get("new_string")
-        if isinstance(o, str) and isinstance(n, str) and current is not None and o in current:
-            new_text = current.replace(o, n, 1)
-    elif tool == "MultiEdit":
-        edits = ti.get("edits")
-        text = current
-        if isinstance(edits, list) and text is not None:
-            ok = True
-            for e in edits:
-                if not isinstance(e, dict):
-                    ok = False; break
-                o, n = e.get("old_string"), e.get("new_string")
-                if not isinstance(o, str) or not isinstance(n, str) or o not in text:
-                    ok = False; break
-                text = text.replace(o, n, 1)
-            if ok:
-                new_text = text
-
-    if new_text is None:
+    new_text, ok = gate_lib.gate_reconstruct_write(tool, ti, current)
+    if not ok:
         deny(
             "this write targets %s but the resulting content cannot be determined "
             "from the tool input (tool=%r); use Write, or an Edit/MultiEdit whose "
@@ -165,24 +156,57 @@ try:
     if loop_state not in TERMINAL:
         sys.exit(0)  # non-terminal record: this extension does not apply yet
 
-    low = new_text.lower()
+    lines = new_text.splitlines()
+
+    def heading_has_list_item(heading_re):
+        for i, line in enumerate(lines):
+            if heading_re.match(line):
+                for j in range(i + 1, len(lines)):
+                    if re.match(r'^#{1,6}\s', lines[j]):
+                        break
+                    if re.match(r'^\s*[-*]\s+\S', lines[j]):
+                        return True
+                return False
+        return None
+
     missing = []
 
-    if not re.search(r'\btarget locale', low) and "locale" not in low:
-        missing.append("locale-list")
+    locale_heading_re = re.compile(r'^#{1,6}\s*target locale\b', re.I)
+    has_list = heading_has_list_item(locale_heading_re)
+    if has_list is None:
+        missing.append("target-locale-heading")
+    elif has_list is False:
+        missing.append("target-locale-list-item")
 
-    mqm_dims = ["accuracy", "fluency", "terminology", "locale convention",
+    mqm_heading_re = re.compile(r'^#{1,6}\s*mqm tags?\b', re.I)
+    has_mqm_heading = any(mqm_heading_re.match(line) for line in lines)
+    if not has_mqm_heading:
+        DIMS = ["accuracy", "fluency", "terminology", "locale convention",
                 "style", "verity", "design", "internationalization"]
-    if not any(d in low for d in mqm_dims):
-        missing.append("mqm-tag")
+        DIM_RE = re.compile(r'\[(%s)\]|\(tag:\s*(%s)\)' % (
+            "|".join(DIMS), "|".join(DIMS)), re.I)
+        ISSUE_RE = re.compile(r'^\s*-\s*issue\s*:', re.I)
+        found = False
+        for i, line in enumerate(lines):
+            if not ISSUE_RE.match(line):
+                continue
+            adjacent = line
+            if i + 1 < len(lines) and not ISSUE_RE.match(lines[i + 1]):
+                adjacent += "\n" + lines[i + 1]
+            if DIM_RE.search(adjacent):
+                found = True
+                break
+        if not found:
+            missing.append("mqm-heading-or-tagged-issue")
 
     if missing:
         deny(
             "terminal localization record is missing required field(s): %s. Per the "
-            "approved norms proposal, a terminal-state record must show a target-locale "
-            "list and tag every string-external issue with one of the MQM 8 top-level "
-            "dimensions (Accuracy, Fluency, Terminology, Locale convention, Style, "
-            "Verity, Design, Internationalization)." % ", ".join(missing)
+            "approved norms proposal, a terminal-state record must show a "
+            "`target locale` heading with at least one declared locale, and either "
+            "an `MQM tags` heading or at least one MQM-tagged `- issue:` bullet." % (
+                ", ".join(missing)
+            )
         )
 
     sys.exit(0)

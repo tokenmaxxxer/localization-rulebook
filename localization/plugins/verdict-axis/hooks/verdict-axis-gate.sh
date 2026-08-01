@@ -1,89 +1,105 @@
 #!/usr/bin/env bash
-# PreToolUse gate (Write|Edit|MultiEdit) for localization-verdict-axis.
+# PreToolUse gate (Write|Edit|MultiEdit|Bash) for localization-verdict-axis.
 # Targets docs/issue-<n>/reports/localization.md at terminal loop_state
-# (default terminal set: "landed" — no role-specific terminal state found in
-# phase-1 survey, kept as-is). Requires, per declared target locale, a
+# (default terminal set: "landed"). Requires, per declared target locale, a
 # two-axis verdict line in the form:
 #   - <locale>: checklist=<pass|fail|N/A(reason)>, style=<pass|fail|N/A(reason)>
-# A locale with no verdict line at all is denied unless it appears in an
-# explicit "verdict-less locales:" exclusion line with a reason.
+# A declared locale (from a `target locale` heading's list items) with no
+# verdict line is denied unless it appears in an explicit
+# "verdict-less locales:" exclusion line with a reason.
 #
-# Structure (trap-at-top, independent root resolution, Write/Edit/MultiEdit
-# content reconstruction, fail-closed) referenced from pricing-rulebook's
-# methodology-gate.sh — not vendored, rewritten for this surface. This gate
-# runs alongside base's record-fields-localization-gate.sh (loose existence
-# check) and localization-mqm-tagging's gate (independent AND composition on
-# the same PreToolUse matcher) — none of the three knows about the others.
+# Migrated to the gate-house standard (core issue #72): sources
+# core/hooks/lib/gate-lib.sh / loads gate-lib.py for the fail-closed trap,
+# kill-switch convention, JSON parse, path normalize and Write/Edit/
+# MultiEdit reconstruction primitives, replacing this gate's hand-rolled
+# copies. This gate runs alongside base's record-fields-localization-gate.sh
+# (loose existence check) and localization-mqm-tagging's gate (independent
+# AND composition on the same PreToolUse matcher) — none of the three knows
+# about the others.
+#
+# Semantic upgrade (issue-10): implements the verdict-less-locale check the
+# header already promised — the declared target-locale list (from the
+# `target locale` heading) is cross-referenced against locales that have a
+# verdict line, and a declared locale with neither a verdict nor a
+# "verdict-less locales: <locale>(<reason>)" entry is denied.
 #
 # Kill switch: export LOCALIZATION_VERDICT_AXIS_GATE_OFF=1
+CORE_HOOKS_ROOT="${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../core" && pwd -P)}/hooks"
+. "$CORE_HOOKS_ROOT/lib/gate-lib.sh"
+gate_trap_fail_closed
 set -uo pipefail
 
-deny() { echo "localization-verdict-axis: refused — $1" >&2; exit 2; }
+GATE_NAME="localization-verdict-axis"
 
-case "${LOCALIZATION_VERDICT_AXIS_GATE_OFF:-}" in
-  ""|0|false|no|off) ;;
-  *) exit 0 ;;
-esac
-
+gate_kill_switch_active "${LOCALIZATION_VERDICT_AXIS_GATE_OFF:-}" || exit 0
 [ "${CLAUDE_ROLE:-}" = "localization" ] || exit 0
 
-command -v python3 >/dev/null 2>&1 || deny "requires python3, which is not on PATH; denying rather than guessing."
+command -v python3 >/dev/null 2>&1 || gate_deny "$GATE_NAME" "requires python3, which is not on PATH; denying rather than guessing."
 
 payload="$(cat 2>/dev/null || true)"
-[ -n "$payload" ] || deny "empty tool-use payload on stdin; cannot evaluate."
-
-_target="$(printf '%s' "$payload" | python3 -c '
-import json,sys
-try: e=json.loads(sys.stdin.read())
-except Exception: sys.exit(0)
-ti=e.get("tool_input") if isinstance(e,dict) else None
-if isinstance(ti,dict):
-    v=ti.get("file_path")
-    if isinstance(v,str) and v: print(v)
-' 2>/dev/null || true)"
+[ -n "$payload" ] || gate_deny "$GATE_NAME" "empty tool-use payload on stdin; cannot evaluate."
 
 _plausible() { [ -n "$1" ] && [ -d "$1" ] && { [ -e "$1/.git" ] || [ -f "$1/docs/specs/role-handoff-contract.md" ]; }; }
-_under() {
-  [ -z "$2" ] && return 0
-  python3 -c '
-import os,posixpath,sys
-r,t=sys.argv[1],sys.argv[2]
-try: rr=posixpath.normpath(os.path.realpath(r).replace("\\","/"))
-except Exception: sys.exit(1)
-n=t.replace("\\","/"); a=n if posixpath.isabs(n) else posixpath.join(rr,n)
-a=posixpath.normpath(a); real=posixpath.normpath(os.path.realpath(a).replace("\\","/"))
-sys.exit(0 if (real==rr or real.startswith(rr+"/")) else 1)
-' "$1" "$2"
-}
 
 root=""
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR" && _under "$CLAUDE_PROJECT_DIR" "$_target"; then
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _plausible "$CLAUDE_PROJECT_DIR"; then
   root="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)"
 fi
-if [ -z "$root" ]; then
-  d="$_target"; [ -n "$d" ] || d="$(pwd -P)"; [ -d "$d" ] || d="$(dirname "$d")"
-  root="$(git -C "$d" rev-parse --show-toplevel 2>/dev/null || true)"
-fi
 [ -z "$root" ] && root="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
-[ -z "$root" ] && deny "no project root could be determined; failing closed."
+[ -z "$root" ] && gate_deny "$GATE_NAME" "no project root could be determined; failing closed."
+
+tool_name="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    e = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+print(e.get("tool_name", "") if isinstance(e, dict) else "")
+' 2>/dev/null || true)"
+
+if [ "$tool_name" = "Bash" ]; then
+  cmd="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    e = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+ti = e.get("tool_input") if isinstance(e, dict) else None
+if isinstance(ti, dict):
+    v = ti.get("command")
+    if isinstance(v, str):
+        print(v)
+' 2>/dev/null || true)"
+  hit=0
+  while IFS= read -r tok; do
+    case "$tok" in
+      *docs/issue-*/reports/localization.md) hit=1 ;;
+    esac
+  done < <(gate_bash_write_targets "$cmd")
+  if [ "$hit" -eq 1 ]; then
+    gate_deny "$GATE_NAME" "a Bash command appears to write docs/issue-<n>/reports/localization.md but its resulting content cannot be reconstructed from a shell command; use Write/Edit/MultiEdit so locale verdicts can be checked."
+  fi
+  exit 0
+fi
 
 VA_PAYLOAD="$payload" VA_ROOT="$root" \
 VA_TERMINAL="${RECORD_FIELDS_TERMINAL_STATES:-landed}" \
+GATE_LIB_PY="$GATE_LIB_PY" \
 python3 <<'PY'
 import sys as _fc_sys
 try:
-    import json, os, posixpath, re, sys
+    import importlib.util, json, os, posixpath, re, sys
 
     def deny(m):
-        sys.stderr.write("localization-verdict-axis: refused — %s\n" % m); sys.exit(2)
+        sys.stderr.write("localization-verdict-axis: refused — %s\n" % m)
+        sys.exit(2)
+
+    _spec = importlib.util.spec_from_file_location("gate_lib", os.environ["GATE_LIB_PY"])
+    gate_lib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(gate_lib)
 
     raw = os.environ.get("VA_PAYLOAD", "")
-    try:
-        ev = json.loads(raw) if raw else {}
-    except ValueError:
-        deny("the tool-call payload is not valid JSON; cannot judge locale verdicts on an unparseable write.")
-    if not isinstance(ev, dict):
-        deny("the tool-call payload is not a JSON object; failing closed.")
+    ev = gate_lib.gate_parse_json_or_deny(raw, deny)
 
     tool = ev.get("tool_name")
     ti = ev.get("tool_input")
@@ -94,15 +110,6 @@ try:
     RECORD_RE = re.compile(r'^docs/issue-[0-9]+/reports/localization\.md$')
     TERMINAL = set(os.environ["VA_TERMINAL"].split())
 
-    def resolve(p):
-        n = p.replace("\\", "/")
-        a = n if posixpath.isabs(n) else posixpath.join(root, n)
-        a = posixpath.normpath(a)
-        try:
-            return posixpath.normpath(os.path.realpath(a).replace("\\", "/"))
-        except OSError:
-            return a
-
     path = None
     if tool in ("Write", "Edit", "MultiEdit"):
         p = ti.get("file_path")
@@ -111,46 +118,21 @@ try:
     if path is None:
         sys.exit(0)
 
-    r = resolve(path)
-    if not r.startswith(root + "/"):
-        sys.exit(0)
-    rel = r[len(root):].lstrip("/")
-    if not RECORD_RE.match(rel):
+    rel = gate_lib.gate_normalize_path(root, path)
+    if rel is None or not RECORD_RE.match(rel):
         sys.exit(0)
 
+    fs_path = os.path.join(root, rel)
     current = None
-    if os.path.isfile(r):
+    if os.path.isfile(fs_path):
         try:
-            with open(r, encoding="utf-8-sig") as fh:
+            with open(fs_path, encoding="utf-8-sig") as fh:
                 current = fh.read(1 << 20)
         except OSError:
             deny("%s exists but cannot be read; failing closed." % rel)
 
-    new_text = None
-    if tool == "Write":
-        c = ti.get("content")
-        if isinstance(c, str):
-            new_text = c
-    elif tool == "Edit":
-        o, n = ti.get("old_string"), ti.get("new_string")
-        if isinstance(o, str) and isinstance(n, str) and current is not None and o in current:
-            new_text = current.replace(o, n, 1)
-    elif tool == "MultiEdit":
-        edits = ti.get("edits")
-        text = current
-        if isinstance(edits, list) and text is not None:
-            ok = True
-            for e in edits:
-                if not isinstance(e, dict):
-                    ok = False; break
-                o, n = e.get("old_string"), e.get("new_string")
-                if not isinstance(o, str) or not isinstance(n, str) or o not in text:
-                    ok = False; break
-                text = text.replace(o, n, 1)
-            if ok:
-                new_text = text
-
-    if new_text is None:
+    new_text, ok = gate_lib.gate_reconstruct_write(tool, ti, current)
+    if not ok:
         deny(
             "this write targets %s but the resulting content cannot be determined "
             "from the tool input (tool=%r); use Write, or an Edit/MultiEdit whose "
@@ -162,6 +144,8 @@ try:
     if loop_state not in TERMINAL:
         sys.exit(0)  # non-terminal record: this extension does not apply yet
 
+    lines = new_text.splitlines()
+
     VERDICT_LINE = re.compile(
         r'^\s*-\s*([A-Za-z]{2}(?:-[A-Za-z]{2})?)\s*:\s*checklist=(\S.*?)\s*,\s*style=(\S.*?)\s*$',
         re.M,
@@ -170,7 +154,37 @@ try:
     for mo in VERDICT_LINE.finditer(new_text):
         verdicted[mo.group(1)] = (mo.group(2).strip(), mo.group(3).strip())
 
-    if not verdicted:
+    VERDICT_LESS_LINE = re.compile(r'^\s*verdict-less locales?\s*:\s*(.+)$', re.M | re.I)
+    verdictless = set()
+    m_vl = VERDICT_LESS_LINE.search(new_text)
+    if m_vl:
+        for tok in re.findall(r'([A-Za-z]{2}(?:-[A-Za-z]{2})?)\s*\([^)]*\)', m_vl.group(1)):
+            verdictless.add(tok)
+
+    # Declared target-locale list: list items under a `target locale`
+    # heading, before the next heading of any level.
+    locale_heading_re = re.compile(r'^#{1,6}\s*target locale\b', re.I)
+    declared = []
+    for i, line in enumerate(lines):
+        if locale_heading_re.match(line):
+            for j in range(i + 1, len(lines)):
+                if re.match(r'^#{1,6}\s', lines[j]):
+                    break
+                mm = re.match(r'^\s*[-*]\s+([A-Za-z]{2}(?:-[A-Za-z]{2})?)\b', lines[j])
+                if mm:
+                    declared.append(mm.group(1))
+            break
+
+    if declared:
+        missing_locales = [loc for loc in declared if loc not in verdicted and loc not in verdictless]
+        if missing_locales:
+            deny(
+                "declared target locale(s) %s have neither a two-axis verdict line nor "
+                "a 'verdict-less locales: <locale>(<reason>)' exclusion entry." % (
+                    ", ".join(missing_locales)
+                )
+            )
+    elif not verdicted:
         deny(
             "terminal localization record has no per-locale two-axis verdict line. Per "
             "issue-1 (b)-1, each target locale needs a line "
