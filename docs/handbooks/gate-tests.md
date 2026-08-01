@@ -3,9 +3,10 @@
 `tests/run-gate-tests.sh` is the repo-root runner for all PreToolUse gate
 tests. All 4 gates it exercises (base `record-fields-localization-gate.sh`
 plus the 3 issue-7 plugin gates) source core issue #72's
-`core/hooks/lib/gate-lib.sh`/`gate-lib.py`, so the runner needs a
-`tokenmaxxxer-core` checkout to resolve against. Run it from the repo
-root:
+`core/hooks/lib/gate-lib.sh`/`gate-lib.py` — with the mandatory `||` guard
+on the source line (core issue #75: an unguarded source is fail-open when
+core is unreachable) — so the runner needs a `tokenmaxxxer-core` checkout
+to resolve against. Run it from the repo root:
 
 ```
 CORE_REF_DIR=/path/to/tokenmaxxxer-core/core bash tests/run-gate-tests.sh
@@ -25,10 +26,12 @@ tool-call payload on stdin, asserting the gate's exit code (0 = allow,
 
 For all 4 gates, the runner additionally calls
 `mandatory_group_cases <prefix> <gate> <off-var> <target> <passing-content> [deny-content]`,
-which runs the gate-house standard's 6 mandatory case groups (`Edit`
+which runs the gate-house standard's 7 mandatory case groups (`Edit`
 `replace_all`, mixed-`replace_all` `MultiEdit`, malformed JSON x3,
 kill-switch-unrecognized-value, absolute/`./`-prefixed path parity,
-`Bash`-tool write to the same target) against that one gate.
+`Bash`-tool write to the same target, and missing-core — a nonexistent
+`CLAUDE_PLUGIN_ROOT_CORE` with no valid relative fallback, must deny)
+against that one gate.
 
 Exit status is non-zero if any case fails; the summary line
 (`gate tests: N passed, M failed`) is printed last.
@@ -42,7 +45,7 @@ Exit status is non-zero if any case fails; the summary line
   `mk_multiedit_payload`, `mk_bash_payload` are supplied by the runner —
   do not redefine them in `cases.sh`). Source and call the function from
   `tests/run-gate-tests.sh`, and add a `mandatory_group_cases` call for
-  the new gate so it gets the 6 mandatory groups too.
+  the new gate so it gets the 7 mandatory groups too.
 - New case for an existing gate: add another `run ...` line inside that
   plugin's `*_cases()` function, or (for the base gate) directly in
   `tests/run-gate-tests.sh`.

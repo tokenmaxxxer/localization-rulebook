@@ -17,7 +17,7 @@
 #
 # Kill switch: export LOCALIZATION_PROPOSAL_GATE_OFF=1
 CORE_HOOKS_ROOT="${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../core" && pwd -P)}/hooks"
-. "$CORE_HOOKS_ROOT/lib/gate-lib.sh"
+. "$CORE_HOOKS_ROOT/lib/gate-lib.sh" || { echo "localization-proposal-gate.sh: cannot source gate-lib.sh" >&2; exit 2; }
 gate_trap_fail_closed
 set -uo pipefail
 
