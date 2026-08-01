@@ -144,6 +144,13 @@ mandatory_group_cases() {
   #    hit — content is undeterminable from a shell command, so fail-closed.
   run "$prefix: mandatory Bash-tool write to same target" 2 "$gate" \
     "$(mk_bash_payload "printf 'x' > $target")"
+
+  # 7. gate-lib.sh sourced with CLAUDE_PLUGIN_ROOT_CORE pointed at a
+  #    nonexistent path and no valid relative fallback — must deny (exit 2),
+  #    not the pre-issue-75 silent-allow bug (gate-house-standard.md:84-86).
+  run "$prefix: mandatory missing-core (nonexistent CLAUDE_PLUGIN_ROOT_CORE, no fallback)" 2 "$gate" \
+    "$(mk_write_payload "$target" "$content")" \
+    "CLAUDE_PLUGIN_ROOT_CORE=$SANDBOX/no-such-core"
 }
 
 # --- new plugin gates -------------------------------------------------
